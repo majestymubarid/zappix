@@ -1,3 +1,4 @@
+```ts
 import { prisma } from '@/lib/prisma'
 
 export async function GET() {
@@ -11,13 +12,11 @@ export async function GET() {
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1)
   const monthKey = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`
 
-  // Release all pending commissions from last month
   const released = await prisma.commission.updateMany({
     where: { status: 'pending', billingCycleMonth: monthKey },
     data: { status: 'available', releasedAt: now },
   })
 
-  // Get all referrers who earned commissions last month
   const earners = await prisma.commission.groupBy({
     by: ['referrerId'],
     where: { billingCycleMonth: monthKey },
@@ -25,14 +24,13 @@ export async function GET() {
     _count: { id: true },
   })
 
-  // Calculate and award leaderboard bonuses
   await awardLeaderboardBonuses(monthKey)
 
   return Response.json({ released: released.count, earners: earners.length })
 }
 
 async function awardLeaderboardBonuses(monthKey: string) {
-  const prizes = [20000000, 10000000, 5000000] // ₦200k, ₦100k, ₦50k in kobo
+  const prizes = [20000000, 10000000, 5000000]
 
   const leaderboard = await prisma.commission.groupBy({
     by: ['referrerId'],
@@ -43,8 +41,8 @@ async function awardLeaderboardBonuses(monthKey: string) {
   })
 
   for (let i = 0; i < leaderboard.length; i++) {
-    if (prizes[i] && leaderboard[i]._sum?.amount != null && leaderboard[i]._sum.amount > 0) {
-      // Find a referral to attach bonus to (or create placeholder)
+    const amount = leaderboard[i]._sum?.amount ?? 0
+    if (prizes[i] && amount > 0) {
       const referral = await prisma.referral.findFirst({
         where: { referrerId: leaderboard[i].referrerId },
       })
@@ -65,3 +63,4 @@ async function awardLeaderboardBonuses(monthKey: string) {
     }
   }
 }
+```
