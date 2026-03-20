@@ -1,4 +1,3 @@
-```ts
 import { NextRequest, NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
@@ -33,4 +32,3 @@ export async function GET(
     headers: { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' },
   })
 }
-```
