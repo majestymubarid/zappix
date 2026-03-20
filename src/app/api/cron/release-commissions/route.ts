@@ -43,7 +43,7 @@ async function awardLeaderboardBonuses(monthKey: string) {
   })
 
   for (let i = 0; i < leaderboard.length; i++) {
-    if (prizes[i] && leaderboard[i]._sum.amount && leaderboard[i]._sum.amount > 0) {
+    if (prizes[i] && leaderboard[i]._sum?.amount != null && leaderboard[i]._sum.amount > 0) {
       // Find a referral to attach bonus to (or create placeholder)
       const referral = await prisma.referral.findFirst({
         where: { referrerId: leaderboard[i].referrerId },
