@@ -228,7 +228,7 @@ UI font	Nunito (sans-serif, 400-800) — body, buttons, nav
 Key Risks & Mitigations
 Risk	Mitigation
 WhatsApp account bans	Full Ban Risk Management: 21-day warm-up, smart throttle (Safe/Normal/Fast), anti-pattern detection, number health monitor, mandatory risk disclosure
-High RAM usage from Baileys	~150-250 MB per connection. CX32 (8 GB) supports ~10 numbers. Scale to CX42/CX52 as users grow
+High RAM usage from Baileys	~150-250 MB per connection. OCI Compute (24 GB) supports ~100 numbers. Scale based on usage.
 Paystack webhook reliability	Verify signatures, idempotent handlers, log all events
 Recommended Build Order for a Solo Developer
 IMPORTANT
