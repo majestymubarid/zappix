@@ -1,0 +1,635 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+
+  // Zappix fields
+  accountType    String? // whatsapp_tv | business | agency
+  planId         String?
+  plan           Plan?     @relation(fields: [planId], references: [id])
+  isFounder      Boolean   @default(false)
+  onboarded      Boolean   @default(false)
+  riskAccepted   Boolean   @default(false)
+  riskAcceptedAt DateTime?
+
+  whatsappNumbers   WhatsappNumber[]
+  contactLists      ContactList[]
+  contacts          Contact[]
+  broadcasts        Broadcast[]
+  scheduledStatuses ScheduledStatus[]
+  adSlots           AdSlot[]
+  bots              Bot[]
+  menuBots          MenuBot[]
+  teamMemberships   TeamMember[]      @relation("MemberOf")
+  teamOwnerships    TeamMember[]      @relation("OwnerOf")
+  referralCode      ReferralCode?
+  referralsMade     Referral[]        @relation("ReferrerUser")
+  referredBy        Referral?         @relation("ReferredUser")
+  commissions       Commission[]
+  withdrawals       Withdrawal[]
+  activityLogs      ActivityLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ── Plans ─────────────────────────────────────────────────────────────────────
+model Plan {
+  id                  String  @id @default(cuid())
+  name                String  @unique // creator | growth | agency
+  monthlyPrice        Int // in kobo
+  yearlyPrice         Int
+  founderMonthlyPrice Int
+  founderYearlyPrice  Int
+  maxNumbers          Int? // null = unlimited
+  maxContacts         Int?
+  maxBroadcastsMonth  Int?
+  maxStatusMonth      Int?
+  maxTeamMembers      Int?
+  maxAdSlots          Int?
+  storageGb           Int?
+  hasAdvancedBot      Boolean @default(false)
+  hasApiAccess        Boolean @default(false)
+  hasFullAnalytics    Boolean @default(false)
+  hasCsvExport        Boolean @default(false)
+  hasPdfExport        Boolean @default(false)
+  paystackPlanCode    String?
+  paystackYearlyCode  String?
+  users               User[]
+}
+
+// ── WhatsApp Numbers ──────────────────────────────────────────────────────────
+model WhatsappNumber {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phoneNumber      String
+  displayName      String
+  colourTag        String    @default("green")
+  category         String    @default("whatsapp_tv") // whatsapp_tv | business | support
+  connectionStatus String    @default("disconnected") // connected|reconnecting|disconnected|paused|suspended
+  sessionPath      String?
+  lastConnectedAt  DateTime?
+  warmupDay        Int       @default(0)
+  warmupComplete   Boolean   @default(false)
+  isActive         Boolean   @default(true)
+  notes            String?
+
+  scheduledStatuses ScheduledStatus[]
+  broadcasts        BroadcastNumber[]
+  adSlots           AdSlotNumber[]
+  bots              Bot[]
+  activityLogs      ActivityLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, phoneNumber])
+}
+
+// ── Contacts ──────────────────────────────────────────────────────────────────
+model Contact {
+  id           String               @id @default(cuid())
+  userId       String
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phoneNumber  String
+  firstName    String?
+  lastName     String?
+  email        String?
+  city         String?
+  state        String?
+  source       String               @default("manual") // manual | csv_import | bot_capture
+  isOptedOut   Boolean              @default(false)
+  optedOutAt   DateTime?
+  notes        String?
+  customValues ContactCustomValue[]
+  lists        ContactListMember[]
+  tags         ContactTag[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@unique([userId, phoneNumber])
+}
+
+model ContactList {
+  id        String              @id @default(cuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  isDefault Boolean             @default(false)
+  members   ContactListMember[]
+  createdAt DateTime            @default(now())
+}
+
+model ContactListMember {
+  contactId String
+  listId    String
+  contact   Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  list      ContactList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  addedAt   DateTime    @default(now())
+
+  @@id([contactId, listId])
+}
+
+model Tag {
+  id       String       @id @default(cuid())
+  userId   String
+  name     String
+  colour   String       @default("green")
+  contacts ContactTag[]
+
+  @@unique([userId, name])
+}
+
+model ContactTag {
+  contactId  String
+  tagId      String
+  contact    Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  assignedAt DateTime @default(now())
+
+  @@id([contactId, tagId])
+}
+
+model CustomField {
+  id        String               @id @default(cuid())
+  userId    String
+  name      String
+  fieldType String // text | number | dropdown | date | boolean
+  options   String? // JSON for dropdown values
+  sortOrder Int                  @default(0)
+  values    ContactCustomValue[]
+}
+
+model ContactCustomValue {
+  id            String      @id @default(cuid())
+  contactId     String
+  customFieldId String
+  value         String?
+  contact       Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  customField   CustomField @relation(fields: [customFieldId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, customFieldId])
+}
+
+// ── Scheduled Statuses ────────────────────────────────────────────────────────
+model ScheduledStatus {
+  id            String               @id @default(cuid())
+  userId        String
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaUrl      String?
+  mediaType     String // image | video | gif | text
+  caption       String?
+  label         String?
+  scheduledAt   DateTime
+  postedAt      DateTime?
+  status        String               @default("pending") // pending|processing|posted|failed|cancelled
+  targetAll     Boolean              @default(true)
+  errorMessage  String?
+  bulkBatchId   String?
+  targetNumbers StatusTargetNumber[]
+
+  createdAt        DateTime        @default(now())
+  WhatsappNumber   WhatsappNumber? @relation(fields: [whatsappNumberId], references: [id])
+  whatsappNumberId String?
+}
+
+model StatusTargetNumber {
+  statusId String
+  numberId String
+  status   ScheduledStatus @relation(fields: [statusId], references: [id], onDelete: Cascade)
+
+  @@id([statusId, numberId])
+}
+
+// ── Broadcasts ────────────────────────────────────────────────────────────────
+model Broadcast {
+  id            String              @id @default(cuid())
+  userId        String
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  messageType   String // text | image | video | document | contact
+  content       String // JSON
+  status        String              @default("draft") // draft|scheduled|sending|sent|failed|cancelled
+  scheduledAt   DateTime?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  throttleSpeed String              @default("safe") // safe | normal | fast
+  autoSplit     Boolean             @default(true)
+  numbers       BroadcastNumber[]
+  audiences     BroadcastAudience[]
+  deliveries    BroadcastDelivery[]
+  replies       BroadcastReply[]
+
+  createdAt DateTime @default(now())
+}
+
+model BroadcastNumber {
+  id          String         @id @default(cuid())
+  broadcastId String
+  numberId    String
+  broadcast   Broadcast      @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  number      WhatsappNumber @relation(fields: [numberId], references: [id])
+  assigned    Int            @default(0)
+  sent        Int            @default(0)
+  delivered   Int            @default(0)
+  failed      Int            @default(0)
+}
+
+model BroadcastAudience {
+  broadcastId   String
+  contactListId String
+  broadcast     Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+
+  @@id([broadcastId, contactListId])
+}
+
+model BroadcastDelivery {
+  id           String    @id @default(cuid())
+  broadcastId  String
+  contactId    String
+  numberId     String
+  status       String    @default("queued") // queued | sent | delivered | failed
+  sentAt       DateTime?
+  deliveredAt  DateTime?
+  errorMessage String?
+  broadcast    Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+}
+
+model BroadcastReply {
+  id           String    @id @default(cuid())
+  broadcastId  String
+  contactPhone String
+  message      String
+  repliedAt    DateTime  @default(now())
+  broadcast    Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+}
+
+model OptOut {
+  id                   String    @id @default(cuid())
+  userId               String
+  contactPhone         String
+  optedOutViaBroadcast String?
+  optedOutAt           DateTime  @default(now())
+  isResubscribed       Boolean   @default(false)
+  resubscribedAt       DateTime?
+
+  @@unique([userId, contactPhone])
+}
+
+// ── Ad Slots ──────────────────────────────────────────────────────────────────
+model AdSlot {
+  id                   String         @id @default(cuid())
+  userId               String
+  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                 String
+  slotType             String // status | broadcast | combo
+  estimatedReach       Int            @default(0)
+  price                Int // in kobo
+  bookingMode          String         @default("both") // online | manual | both
+  maxBookingsPerDay    Int            @default(3)
+  creativeRequirements String?
+  isActive             Boolean        @default(true)
+  numbers              AdSlotNumber[]
+  bookings             AdBooking[]
+
+  createdAt DateTime @default(now())
+}
+
+model AdSlotNumber {
+  slotId   String
+  numberId String
+  slot     AdSlot         @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  number   WhatsappNumber @relation(fields: [numberId], references: [id])
+
+  @@id([slotId, numberId])
+}
+
+model AdBooking {
+  id              String      @id @default(cuid())
+  slotId          String
+  ownerId         String
+  slot            AdSlot      @relation(fields: [slotId], references: [id])
+  clientName      String
+  clientEmail     String?
+  clientPhone     String?
+  creativeUrl     String?
+  caption         String?
+  broadcastText   String?
+  scheduledDate   DateTime
+  status          String      @default("pending_approval") // pending_approval|approved|rejected|delivered|cancelled
+  bookingMode     String // online | manual
+  amount          Int // in kobo
+  paystackRef     String?
+  approvedAt      DateTime?
+  deliveredAt     DateTime?
+  rejectionReason String?
+  delivery        AdDelivery?
+
+  createdAt DateTime @default(now())
+}
+
+model AdDelivery {
+  id               String    @id @default(cuid())
+  bookingId        String    @unique
+  booking          AdBooking @relation(fields: [bookingId], references: [id])
+  statusViews      Int       @default(0)
+  broadcastSent    Int       @default(0)
+  broadcastFailed  Int       @default(0)
+  broadcastReplies Int       @default(0)
+  estimatedReach   Int       @default(0)
+  deliveredAt      DateTime?
+  reportSentAt     DateTime?
+}
+
+// ── Bots ──────────────────────────────────────────────────────────────────────
+model Bot {
+  id                String         @id @default(cuid())
+  userId            String
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  numberId          String
+  number            WhatsappNumber @relation(fields: [numberId], references: [id])
+  isEnabled         Boolean        @default(false)
+  activeHoursStart  String? // "08:00"
+  activeHoursEnd    String? // "22:00"
+  greetingTrigger   String         @default("any")
+  language          String         @default("en")
+  humanTakeoverMins Int            @default(30)
+  reEngageMins      Int            @default(10)
+  awayMessage       AwayMessage?
+  menus             BotMenu[]
+  faqEntries        FaqEntry[]
+  flows             BotFlow[]
+  sessions          BotSession[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AwayMessage {
+  id               String  @id @default(cuid())
+  botId            String  @unique
+  bot              Bot     @relation(fields: [botId], references: [id], onDelete: Cascade)
+  message          String
+  scheduleType     String  @default("always") // always | custom_hours | weekends
+  oneReplyPerHours Int     @default(24)
+  isActive         Boolean @default(true)
+}
+
+model BotMenu {
+  id             String     @id @default(cuid())
+  botId          String
+  bot            Bot        @relation(fields: [botId], references: [id], onDelete: Cascade)
+  welcomeMessage String
+  footerText     String?
+  items          MenuItem[]
+}
+
+model MenuItem {
+  id            String  @id @default(cuid())
+  menuId        String
+  menu          BotMenu @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  number        Int
+  label         String
+  actionType    String // faq | payment | lead_capture | order | submenu | escalate
+  actionPayload String? // JSON
+  sortOrder     Int     @default(0)
+}
+
+model FaqEntry {
+  id             String  @id @default(cuid())
+  botId          String
+  bot            Bot     @relation(fields: [botId], references: [id], onDelete: Cascade)
+  triggerPhrases String // JSON array
+  responseText   String
+  isActive       Boolean @default(true)
+}
+
+model BotFlow {
+  id          String          @id @default(cuid())
+  botId       String
+  bot         Bot             @relation(fields: [botId], references: [id], onDelete: Cascade)
+  flowType    String // lead_capture | order
+  config      String // JSON
+  notifyOwner Boolean         @default(true)
+  isActive    Boolean         @default(true)
+  submissions BotSubmission[]
+}
+
+model BotSession {
+  id            String   @id @default(cuid())
+  botId         String
+  bot           Bot      @relation(fields: [botId], references: [id])
+  contactPhone  String
+  currentFlowId String?
+  currentStep   Int      @default(0)
+  collectedData String? // JSON
+  status        String   @default("active") // active|completed|paused|escalated
+  startedAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model BotSubmission {
+  id             String   @id @default(cuid())
+  flowId         String
+  flow           BotFlow  @relation(fields: [flowId], references: [id])
+  contactPhone   String
+  data           String // JSON
+  submissionType String // lead | order
+  createdAt      DateTime @default(now())
+}
+
+// ── Menu Bot ──────────────────────────────────────────────────────────────────
+model MenuBot {
+  id                 String        @id @default(cuid())
+  userId             String
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  numberId           String
+  triggerKeyword     String        @default("any")
+  welcomeMessage     String
+  footerText         String?
+  sessionTimeoutMins Int           @default(10)
+  language           String        @default("en")
+  isActive           Boolean       @default(false)
+  items              MenuBotItem[]
+
+  createdAt DateTime @default(now())
+}
+
+model MenuBotItem {
+  id          String  @id @default(cuid())
+  menuBotId   String
+  menuBot     MenuBot @relation(fields: [menuBotId], references: [id], onDelete: Cascade)
+  parentId    String?
+  itemType    String // product | service | download | submenu | action
+  number      Int
+  keyword     String?
+  title       String
+  description String?
+  price       String?
+  imageUrl    String?
+  fileUrl     String?
+  ctaType     String?
+  ctaPayload  String? // JSON
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+}
+
+// ── Referral System ───────────────────────────────────────────────────────────
+model ReferralCode {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code         String    @unique
+  linkSlug     String    @unique
+  isCustomised Boolean   @default(false)
+  firstUsedAt  DateTime?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+}
+
+model Referral {
+  id             String       @id @default(cuid())
+  referrerId     String
+  referredUserId String       @unique
+  referrer       User         @relation("ReferrerUser", fields: [referrerId], references: [id])
+  referredUser   User         @relation("ReferredUser", fields: [referredUserId], references: [id])
+  planId         String?
+  status         String       @default("trial") // active | churned | trial | paused
+  convertedAt    DateTime?
+  churnedAt      DateTime?
+  commissions    Commission[]
+  createdAt      DateTime     @default(now())
+}
+
+model Commission {
+  id                String    @id @default(cuid())
+  referralId        String
+  referrerId        String
+  referral          Referral  @relation(fields: [referralId], references: [id])
+  referrer          User      @relation(fields: [referrerId], references: [id])
+  amount            Int // in kobo
+  status            String    @default("pending") // pending | available | withdrawn | reversed | paused
+  billingCycleMonth String // "2026-03"
+  paymentReference  String?
+  releasedAt        DateTime?
+  createdAt         DateTime  @default(now())
+}
+
+model BankAccount {
+  id                    String       @id @default(cuid())
+  userId                String       @unique
+  bankName              String
+  accountNumber         String
+  accountName           String
+  paystackRecipientCode String?
+  isVerified            Boolean      @default(false)
+  createdAt             DateTime     @default(now())
+  withdrawals           Withdrawal[]
+}
+
+model Withdrawal {
+  id                 String      @id @default(cuid())
+  userId             String
+  user               User        @relation(fields: [userId], references: [id])
+  bankAccountId      String
+  bankAccount        BankAccount @relation(fields: [bankAccountId], references: [id])
+  amount             Int // in kobo
+  paystackTransferId String?
+  status             String      @default("processing") // processing | completed | failed
+  requestedAt        DateTime    @default(now())
+  completedAt        DateTime?
+}
+
+// ── Team ──────────────────────────────────────────────────────────────────────
+model TeamMember {
+  id           String    @id @default(cuid())
+  ownerId      String
+  memberId     String
+  owner        User      @relation("OwnerOf", fields: [ownerId], references: [id], onDelete: Cascade)
+  member       User      @relation("MemberOf", fields: [memberId], references: [id], onDelete: Cascade)
+  role         String // admin | editor | viewer
+  inviteEmail  String
+  inviteStatus String    @default("pending") // pending | accepted | revoked
+  invitedAt    DateTime  @default(now())
+  acceptedAt   DateTime?
+
+  @@unique([ownerId, memberId])
+}
+
+// ── Analytics ─────────────────────────────────────────────────────────────────
+model AnalyticsDaily {
+  id                   String   @id @default(cuid())
+  userId               String
+  date                 DateTime @db.Date
+  statusEstimatedReach Int      @default(0)
+  statusPostsPublished Int      @default(0)
+  broadcastsSent       Int      @default(0)
+  messagesSent         Int      @default(0)
+  messagesDelivered    Int      @default(0)
+  broadcastReplies     Int      @default(0)
+  optOuts              Int      @default(0)
+  newContacts          Int      @default(0)
+  totalContacts        Int      @default(0)
+  adRevenue            Int      @default(0)
+  adBookingsCount      Int      @default(0)
+  botConversations     Int      @default(0)
+
+  @@unique([userId, date])
+}
+
+// ── Activity Log ──────────────────────────────────────────────────────────────
+model ActivityLog {
+  id         String          @id @default(cuid())
+  userId     String
+  actorId    String
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  numberId   String?
+  number     WhatsappNumber? @relation(fields: [numberId], references: [id])
+  action     String
+  targetType String?
+  targetId   String?
+  details    String? // JSON
+  ipAddress  String?
+  createdAt  DateTime        @default(now())
+}
