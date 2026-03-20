@@ -34,6 +34,25 @@ export const userRouter = router({
       return user
     }),
 
+  // Accept risk disclosure
+  acceptRiskDisclosure: protectedProcedure
+    .input(z.object({ riskAccepted: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!input.riskAccepted) {
+        throw new Error('You must accept the risk disclosure')
+      }
+
+      const user = await ctx.prisma.user.update({
+        where: { id: ctx.user.id },
+        data: {
+          riskAccepted: true,
+          riskAcceptedAt: new Date(),
+        },
+      })
+
+      return user
+    }),
+
   // Complete onboarding
   completeOnboarding: protectedProcedure
     .input(
